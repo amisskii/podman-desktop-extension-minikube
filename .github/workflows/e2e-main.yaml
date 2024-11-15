@@ -45,6 +45,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        name: Clone Minikube extension repository workflow dispatch
         if: github.event_name == 'workflow_dispatch'
         with:
           repository: ${{ github.event.inputs.organization }}/${{ github.event.inputs.repositoryName }}
@@ -52,13 +53,15 @@ jobs:
           path: ${{ github.event.inputs.repositoryName }}
 
       - uses: actions/checkout@v4
+        name: Clone Minikube extension repository scheduled
         if: github.event_name == 'schedule'
         with: 
           path: extension-minikube
 
       - uses: actions/checkout@v4
+        name: Clone podman-desktop repository
         with:
-          repository: containers/podman-desktop
+          repository: podman-desktop/podman-desktop
           ref: main
           path: podman-desktop
 
@@ -101,11 +104,9 @@ jobs:
         with: 
           start: false
 
-      - name: Ensure minikube is installed and cluster nor running
+      - name: Ensure minikube is installed
         run: |
           minikube version
-          minikube info
-
             
       - name: Execute pnpm
         working-directory: ./podman-desktop
