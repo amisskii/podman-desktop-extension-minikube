@@ -72,11 +72,40 @@ jobs:
           run_install: false
           package_json_file: ./podman-desktop/package.json
 
-      - name: setup-minikube
-        uses: medyagh/setup-minikube@v0.0.18
+      - name: Update podman
+        run: |
+          # ubuntu version from kubic repository to install podman we need (v5)
+          ubuntu_version='23.04'
+          sudo sh -c "echo 'deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list"
+          curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/Release.key" | sudo apt-key add -
+          # install necessary dependencies for criu package which is not part of 23.04
+          sudo apt-get install -qq libprotobuf32t64 python3-protobuf libnet1
+          # install criu manually from static location
+          curl -sLO http://cz.archive.ubuntu.com/ubuntu/pool/universe/c/criu/criu_3.16.1-2_amd64.deb && sudo dpkg -i criu_3.16.1-2_amd64.deb
+          sudo apt-get update -qq
+          sudo apt-get -qq -y install podman || { echo "Start fallback steps for podman nightly installation from a static mirror" && \
+            sudo sh -c "echo 'deb http://ftp.lysator.liu.se/pub/opensuse/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list" && \
+            curl -L "http://ftp.lysator.liu.se/pub/opensuse/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/Release.key" | sudo apt-key add - && \
+            sudo apt-get update && \
+            sudo apt-get -y install podman; }
+          podman version
 
-      - name: insure minikube cli is installed
-        run: minikube version
+      - name: Revert unprivileged user namespace restrictions in Ubuntu 24.04
+        run: |
+          # allow unprivileged user namespace
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: start minikube
+        id: minikube
+        uses: medyagh/setup-minikube@latest
+        with: 
+          start: false
+
+      - name: Ensure minikube is installed and cluster nor running
+        run: |
+          minikube version
+          minikube info
+
             
       - name: Execute pnpm
         working-directory: ./podman-desktop
@@ -97,11 +126,6 @@ jobs:
       - name: Execute pnpm in Minikube Extension
         working-directory: ./extension-minikube
         run: pnpm install
-        
-      - name: Revert unprivileged user namespace restrictions in Ubuntu 24.04
-        run: |
-          # allow unprivileged user namespace
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           
       - name: Run All E2E tests
         working-directory: ./extension-minikube
