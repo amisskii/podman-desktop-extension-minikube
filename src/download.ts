@@ -23,8 +23,11 @@ import * as path from 'node:path';
 
 import type { Octokit } from '@octokit/rest';
 import type * as extensionApi from '@podman-desktop/api';
+import { env, window } from '@podman-desktop/api';
 
-export interface MinikubeGithubReleaseArtifactMetadata {
+import { installBinaryToSystem, whereBinary } from './util';
+
+export interface MinikubeGithubReleaseArtifactMetadata extends extensionApi.QuickPickItem {
   tag: string;
   id: number;
 }
@@ -65,6 +68,77 @@ export class MinikubeDownload {
     return latestReleases[0];
   }
 
+  async selectVersion(cliInfo?: extensionApi.CliTool): Promise<MinikubeGithubReleaseArtifactMetadata> {
+    let releasesMetadata = await this.grabLatestsReleasesMetadata();
+
+    if (releasesMetadata.length === 0) throw new Error('cannot grab minikube releases');
+
+    // if the user already has an installed version, we remove it from the list
+    if (cliInfo) {
+      releasesMetadata = releasesMetadata.filter(release => release.tag.slice(1) !== cliInfo.version);
+    }
+
+    // Show the quickpick
+    const selectedRelease = await window.showQuickPick(releasesMetadata, {
+      placeHolder: 'Select Kind version to download',
+    });
+
+    if (!selectedRelease) {
+      throw new Error('No version selected');
+    }
+    return selectedRelease;
+  }
+
+  getMinikubeExtensionPath(): string {
+    let fileExtension = '';
+    if (env.isWindows) {
+      fileExtension = '.exe';
+    }
+    return path.resolve(this.extensionContext.storagePath, `minikube${fileExtension}`);
+  }
+
+  /**
+   * search if minikube is available in the path or in the extension folder
+   */
+  async findMinikube(): Promise<string | undefined> {
+    try {
+      return await whereBinary('minikube');
+    } catch (err: unknown) {
+      console.debug(err);
+    }
+
+    const extensionPath = this.getMinikubeExtensionPath();
+    if (fs.existsSync(extensionPath)) {
+      return extensionPath;
+    }
+  }
+
+  /**
+   * Given a {@link MinikubeGithubReleaseArtifactMetadata} it will be downloaded to the
+   * extension folder, then on user approval tried to be installed system-wide
+   * @param release the release to download and install
+   */
+  async install(release: MinikubeGithubReleaseArtifactMetadata): Promise<string> {
+    let destFile = await this.download(release);
+
+    const result = await window.showInformationMessage(
+      `minikube binary has been successfully downloaded.\n\nWould you like to install it system-wide for accessibility on the command line? This will require administrative privileges.`,
+      'Yes',
+      'Cancel',
+    );
+
+    if (result !== 'Yes') return destFile;
+
+    try {
+      destFile = await installBinaryToSystem(destFile, 'minikube');
+    } catch (err: unknown) {
+      console.error(err);
+      await window.showErrorMessage(`Something went wrong while trying to install minikube system-wide: ${err}`);
+      // we yet return the extension-folder path to still allow the binary downloaded to be registered by the extension
+    }
+    return destFile;
+  }
+
   // Download minikube from the artifact metadata: MinikubeGithubReleaseArtifactMetadata
   // this will download it to the storage bin folder as well as make it executable
   // return the path where the file has been downloaded
@@ -74,17 +148,12 @@ export class MinikubeDownload {
 
     // Get the storage and check to see if it exists before we download kubectl
     const storageData = this.extensionContext.storagePath;
-    const storageBinFolder = path.resolve(storageData, 'bin');
-    if (!existsSync(storageBinFolder)) {
-      await promises.mkdir(storageBinFolder, { recursive: true });
+    if (!existsSync(storageData)) {
+      await promises.mkdir(storageData, { recursive: true });
     }
 
     // Correct the file extension and path resolution
-    let fileExtension = '';
-    if (process.platform === 'win32') {
-      fileExtension = '.exe';
-    }
-    const minikubeDownloadLocation = path.resolve(storageBinFolder, `minikube${fileExtension}`);
+    const minikubeDownloadLocation = this.getMinikubeExtensionPath();
 
     // Download the asset and make it executable
     await this.downloadReleaseAsset(assetId, minikubeDownloadLocation);

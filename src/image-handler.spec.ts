@@ -19,11 +19,10 @@
 import * as fs from 'node:fs';
 
 import * as extensionApi from '@podman-desktop/api';
-import type { Mock } from 'vitest';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { ImageHandler } from './image-handler';
-import { getMinikubePath } from './util';
+import { getMinikubeAdditionalEnvs } from './util';
 
 let imageHandler: ImageHandler;
 vi.mock('@podman-desktop/api', async () => {
@@ -43,8 +42,7 @@ vi.mock('@podman-desktop/api', async () => {
 
 vi.mock('./util', async () => {
   return {
-    getMinikubePath: vi.fn(),
-    getMinikubeHome: vi.fn(),
+    getMinikubeAdditionalEnvs: vi.fn(),
   };
 });
 
@@ -54,26 +52,22 @@ beforeEach(() => {
 });
 
 test('expect error to be raised if no image is given', async () => {
-  try {
-    await imageHandler.moveImage({ engineId: 'dummy' }, [], undefined);
-  } catch (err) {
-    expect(err).to.be.a('Error');
-    expect(err.message).equal('Image selection not supported yet');
-  }
+  await expect(async () => {
+    await imageHandler.moveImage({ engineId: 'dummy' }, [], '/tmp/minikube');
+  }).rejects.toThrowError('Image selection not supported yet');
 });
 
 test('expect error to be raised if no clusters are given', async () => {
-  try {
-    await imageHandler.moveImage({ engineId: 'dummy', name: 'myimage' }, [], undefined);
-  } catch (err) {
-    expect(err).to.be.a('Error');
-    expect(err.message).equal('No minikube clusters to push to');
-  }
+  await expect(async () => {
+    await imageHandler.moveImage({ engineId: 'dummy', name: 'myimage' }, [], '/tmp/minikube');
+  }).rejects.toThrowError('No minikube clusters to push to');
 });
 
 test('expect image name to be given', async () => {
-  (extensionApi.containerEngine.saveImage as Mock).mockImplementation(
-    (engineId: string, id: string, filename: string) => fs.promises.open(filename, 'w'),
+  vi.mocked(extensionApi.containerEngine.saveImage).mockImplementation(
+    async (_engineId: string, _id: string, filename: string): Promise<void> => {
+      await fs.promises.open(filename, 'w');
+    },
   );
 
   await imageHandler.moveImage(
@@ -85,8 +79,10 @@ test('expect image name to be given', async () => {
 });
 
 test('expect getting showInformationMessage when image is pushed', async () => {
-  (extensionApi.containerEngine.saveImage as Mock).mockImplementation(
-    (engineId: string, id: string, filename: string) => fs.promises.open(filename, 'w'),
+  vi.mocked(extensionApi.containerEngine.saveImage).mockImplementation(
+    async (_engineId: string, _id: string, filename: string): Promise<void> => {
+      await fs.promises.open(filename, 'w');
+    },
   );
 
   await imageHandler.moveImage(
@@ -98,8 +94,10 @@ test('expect getting showInformationMessage when image is pushed', async () => {
 });
 
 test('expect image name and tag to be given', async () => {
-  (extensionApi.containerEngine.saveImage as Mock).mockImplementation(
-    (engineId: string, id: string, filename: string) => fs.promises.open(filename, 'w'),
+  vi.mocked(extensionApi.containerEngine.saveImage).mockImplementation(
+    async (_engineId: string, _id: string, filename: string): Promise<void> => {
+      await fs.promises.open(filename, 'w');
+    },
   );
 
   await imageHandler.moveImage(
@@ -111,22 +109,23 @@ test('expect image name and tag to be given', async () => {
 });
 
 test('expect cli is called with right PATH', async () => {
-  (extensionApi.containerEngine.saveImage as Mock).mockImplementation(
-    (engineId: string, id: string, filename: string) => fs.promises.open(filename, 'w'),
+  vi.mocked(extensionApi.containerEngine.saveImage).mockImplementation(
+    async (_engineId: string, _id: string, filename: string): Promise<void> => {
+      await fs.promises.open(filename, 'w');
+    },
   );
-
-  (getMinikubePath as Mock).mockReturnValue('my-custom-path');
+  vi.mocked(getMinikubeAdditionalEnvs).mockReturnValue({ PATH: 'my-custom-path' });
 
   await imageHandler.moveImage(
     { engineId: 'dummy', name: 'myimage' },
     [{ name: 'c1', engineType: 'podman', status: 'started', apiPort: 8443 }],
     undefined,
   );
-  expect(getMinikubePath).toBeCalled();
+  expect(getMinikubeAdditionalEnvs).toBeCalled();
 
   expect(extensionApi.process.exec).toBeCalledTimes(1);
   // grab the env parameter of the first call to process.Exec
-  const props = (extensionApi.process.exec as Mock).mock.calls[0][2];
+  const props = vi.mocked(extensionApi.process.exec).mock.calls[0][2];
   expect(props).to.have.property('env');
   const env = props.env;
   expect(env).to.have.property('PATH');
