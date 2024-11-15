@@ -50,7 +50,7 @@ jobs:
         with:
           repository: ${{ github.event.inputs.organization }}/${{ github.event.inputs.repositoryName }}
           ref: ${{ github.event.inputs.branch }}
-          path: ${{ github.event.inputs.repositoryName }}
+          path: extension-minikube
 
       - uses: actions/checkout@v4
         name: Clone Minikube extension repository scheduled
