@@ -35,6 +35,7 @@ import {
 } from '@podman-desktop/tests-playwright';
 
 import { createMinikubeCluster } from '../utility/operations';
+import { execSync } from 'child_process';
 
 const EXTENSION_IMAGE: string = 'ghcr.io/podman-desktop/podman-desktop-extension-minikube:nightly';
 const EXTENSION_NAME: string = 'minikube';
@@ -67,6 +68,9 @@ test.use({
   });
 
 test.afterAll(async ({ runner }) => {
+    console.log('Deleting Minikube cluster');
+    execSync('minikube delete', { stdio: 'inherit' });
+
     await runner.close();   
 });
 
