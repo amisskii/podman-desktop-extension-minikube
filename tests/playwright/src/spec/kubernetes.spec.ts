@@ -25,7 +25,7 @@ const RESOURCE_NAME: string = 'minikube';
 const CLUSTER_CREATION_TIMEOUT: number = 300_000;
 
 const EXTENSION_IMAGE: string = process.env.EXTENSION_IMAGE ?? 'ghcr.io/podman-desktop/podman-desktop-extension-minikube:nightly';
-const RUN_ON_OPENSHIFT_PIPELINES: boolean = process.env.CI_RUNNER === 'OpenShift';
+const IS_OPENSHIFT_PIPELINE_RUNNER: boolean = process.env.CI_PLATFORM === 'OpenShift';
 const EXTENSION_NAME: string = 'minikube';
 const EXTENSION_LABEL: string = 'podman-desktop.minikube';
 
@@ -43,8 +43,8 @@ test.beforeAll(async ({ runner, welcomePage, page, navigationBar }) => {
   await extensionsPage.openCatalogTab();
   await extensionsPage.installExtensionFromOCIImage(EXTENSION_IMAGE);
 
-  // Skip CLI install when tests run on linux gha or macOs openshift pipelines. 
-  if (!((isLinux && process.env.GITHUB_ACTIONS) || RUN_ON_OPENSHIFT_PIPELINES)) {
+  // Skip CLI installation when running tests on Linux GitHub Actions or macOS OpenShift Pipelines.
+  if (!((isLinux && process.env.GITHUB_ACTIONS) || IS_OPENSHIFT_PIPELINE_RUNNER)) {
     const settingsBar = await navigationBar.openSettings();
     await settingsBar.cliToolsTab.click();
     await ensureCliInstalled(page, 'Minikube');
@@ -70,7 +70,7 @@ test.afterAll(async ({ navigationBar, runner, page }) => {
   }
 });
 
-test.describe('Kubernetes resources End-to-End test', { tag: '@k8s_e2e' }, () => {
+test.describe.serial('Kubernetes resources End-to-End test', { tag: '@k8s_e2e' }, () => {
   test('Kubernetes Nodes test', async ({ page }) => {
     await checkKubernetesResourceState(page, KubernetesResources.Nodes, MINIKUBE_NODE, KubernetesResourceState.Running);
   });
